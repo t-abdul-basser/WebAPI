@@ -18,7 +18,6 @@ import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -39,7 +38,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.ohdsi.sql.SqlTranslate;
 import javax.ws.rs.core.Response;
 import org.ohdsi.sql.SqlRender;
-import org.ohdsi.webapi.TerminateJobStepExceptionHandler;
 
 import org.ohdsi.webapi.cohortdefinition.CohortDefinition;
 import org.ohdsi.webapi.cohortdefinition.CohortDefinitionDetails;
@@ -50,7 +48,7 @@ import org.ohdsi.webapi.cohortdefinition.CohortGenerationInfo;
 import org.ohdsi.webapi.cohortdefinition.ConceptSet;
 import org.ohdsi.webapi.cohortdefinition.ExpressionType;
 import org.ohdsi.webapi.cohortdefinition.GenerateCohortTasklet;
-import org.ohdsi.webapi.cohortdefinition.GenerationStatus;
+import org.ohdsi.webapi.GenerationStatus;
 import org.ohdsi.webapi.cohortdefinition.InclusionRuleReport;
 import org.ohdsi.webapi.conceptset.ConceptSetExport;
 import org.ohdsi.webapi.conceptset.ExportUtil;
@@ -346,7 +344,7 @@ public class CohortDefinitionService extends AbstractDaoService {
    * @param def The cohort definition to create.
    * @return The new CohortDefinition
    */
-  @PUT
+  @POST
   @Path("/")
   @Produces(MediaType.APPLICATION_JSON)
   @Consumes(MediaType.APPLICATION_JSON)
@@ -466,7 +464,6 @@ public class CohortDefinitionService extends AbstractDaoService {
 
     Step generateCohortStep = stepBuilders.get("cohortDefinition.generateCohort")
       .tasklet(generateTasklet)
-      .exceptionHandler(new TerminateJobStepExceptionHandler())
     .build();
 
     Job generateCohortJob = jobBuilders.get("generateCohort")

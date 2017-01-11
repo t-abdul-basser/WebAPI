@@ -23,6 +23,7 @@ import java.util.HashMap;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
+import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
@@ -34,10 +35,10 @@ import org.ohdsi.webapi.cohortcomparison.BalanceResult;
 import org.ohdsi.webapi.cohortcomparison.ComparativeCohortAnalysis;
 import org.ohdsi.webapi.cohortcomparison.ComparativeCohortAnalysisExecution;
 import org.ohdsi.webapi.cohortcomparison.ComparativeCohortAnalysisInfo;
-import org.ohdsi.webapi.cohortcomparison.PopDistributionValue;
+import org.ohdsi.webapi.cohortcomparison.ModelScoreDistributionValue;
+import org.ohdsi.webapi.cohortcomparison.OutcomeModel;
 import org.ohdsi.webapi.cohortcomparison.PropensityScoreModelCovariate;
 import org.ohdsi.webapi.cohortcomparison.PropensityScoreModelReport;
-import org.ohdsi.webapi.cohortcomparison.StratPopDistributionData;
 import org.ohdsi.webapi.conceptset.ConceptSet;
 import org.ohdsi.webapi.helper.ResourceHelper;
 import org.ohdsi.webapi.job.JobExecutionResource;
@@ -93,15 +94,29 @@ public class ComparativeCohortAnalysisService extends AbstractDaoService {
         return getComparativeCohortAnalysisRepository().findAll();
     }
 
+   
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public ComparativeCohortAnalysis saveComparativeCohortAnalysis(ComparativeCohortAnalysis comparativeCohortAnalysis) {
+    public ComparativeCohortAnalysis createComparativeCohortAnalysis(ComparativeCohortAnalysis comparativeCohortAnalysis) {
+
+      Date d = new Date();
+      comparativeCohortAnalysis.setAnalysisId(null);
+      comparativeCohortAnalysis.setCreated(d);
+      comparativeCohortAnalysis.setModified(d);
+      comparativeCohortAnalysis = this.getComparativeCohortAnalysisRepository().save(comparativeCohortAnalysis);
+      return comparativeCohortAnalysis;
+    }
+
+    @Path("/{id}")
+    @PUT
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public ComparativeCohortAnalysis updateComparativeCohortAnalysis(@PathParam("id") final int id, ComparativeCohortAnalysis comparativeCohortAnalysis) throws Exception {
         Date d = new Date();
-        if (comparativeCohortAnalysis.getCreated() == null) {
-            comparativeCohortAnalysis.setCreated(d);
-        }
+        comparativeCohortAnalysis.setCreated(d); // temporary workaround until client sends the current created value.
         comparativeCohortAnalysis.setModified(d);
+        
         comparativeCohortAnalysis = this.getComparativeCohortAnalysisRepository().save(comparativeCohortAnalysis);
         return comparativeCohortAnalysis;
     }
@@ -138,23 +153,170 @@ public class ComparativeCohortAnalysisService extends AbstractDaoService {
         ccae.setExecutionStatus(ComparativeCohortAnalysisExecution.status.RUNNING);
         ccae.setUserId(0);
         getComparativeCohortAnalysisExecutionRepository().save(ccae);
-
-        ConceptSetExpression cse = conceptSetService.getConceptSetExpression(ccae.getPsExclusionId());
-        Collection<Long> exclusions = vocabularyService.resolveConceptSetExpression(sourceKey, cse);
-        
+       
         String functionName = "executeComparativeCohortAnalysis";
         HashMap<String, Object> parameters = new HashMap();
-        parameters.put("treatment", ccae.getTreatmentId());
-        parameters.put("comparator", ccae.getComparatorId());
-        parameters.put("outcome", ccae.getOutcomeId());
-        parameters.put("timeAtRisk", ccae.getTimeAtRiskEnd());
+        parameters.put("treatmentId", ccae.getTreatmentId());
+        parameters.put("comparatorId", ccae.getComparatorId());
+        parameters.put("outcomeId", ccae.getOutcomeId());
+        parameters.put("modelType", ccae.getModelType());
         parameters.put("executionId", ccae.getExecutionId());
-        parameters.put("exclusions", exclusions);
+        parameters.put("dbms", dbms);        
         parameters.put("connectionString", connectionString);
-        parameters.put("dbms", dbms);
         parameters.put("cdmTableQualifier", cdmTableQualifier);
         parameters.put("resultsTableQualifier", resultsTableQualifier);
+        parameters.put("timeAtRiskStart", ccae.getTimeAtRiskStart());
+        parameters.put("timeAtRiskEnd", ccae.getTimeAtRiskEnd());
+        parameters.put("addExposureDaysToEnd", ccae.getAddExposureDaysToEnd());
+        parameters.put("minimumWashoutPeriod", ccae.getMinimumWashoutPeriod());
+        parameters.put("minimumDaysAtRisk", ccae.getMinimumDaysAtRisk());
+        parameters.put("rmSubjectsInBothCohorts", ccae.getRmSubjectsInBothCohorts());
+        parameters.put("rmPriorOutcomes", ccae.getRmPriorOutcomes());
+        parameters.put("psAdjustment", ccae.getPsAdjustment());
+        
+        if (ccae.getPsExclusionId() > 0) {
+            ConceptSetExpression cse = conceptSetService.getConceptSetExpression(ccae.getPsExclusionId());
+            Collection<Long> exclusions = vocabularyService.resolveConceptSetExpression(sourceKey, cse);
+            parameters.put("psExclusions" , exclusions);
+        }
 
+        if (ccae.getPsExclusionId() > 0) {
+            ConceptSetExpression cse = conceptSetService.getConceptSetExpression(ccae.getPsInclusionId());
+            Collection<Long> inclusions = vocabularyService.resolveConceptSetExpression(sourceKey, cse);
+            parameters.put("psInclusions" , inclusions);
+        }
+        
+        parameters.put("psDemographics", ccae.getPsDemographics());
+        parameters.put("psDemographicsGender", ccae.getPsDemographicsGender());
+        parameters.put("psDemographicsRace", ccae.getPsDemographicsRace());
+        parameters.put("psDemographicsEthnicity", ccae.getPsDemographicsEthnicity());
+        parameters.put("psDemographicsAge", ccae.getPsDemographicsAge());
+        parameters.put("psDemographicsYear", ccae.getPsDemographicsYear());
+        parameters.put("psDemographicsMonth", ccae.getPsDemographicsMonth());
+        parameters.put("psTrim", ccae.getPsTrim());
+        parameters.put("psTrimFraction", ccae.getPsTrimFraction());
+        parameters.put("psMatch", ccae.getPsMatch());
+        parameters.put("psMatchMaxRatio", ccae.getPsMatchMaxRatio());
+        parameters.put("psStrat", ccae.getPsStrat());
+        parameters.put("psStratNumStrata", ccae.getPsStratNumStrata());
+        parameters.put("psConditionOcc", ccae.getPsConditionOcc());
+        parameters.put("psConditionOcc365d", ccae.getPsConditionOcc365d());
+        parameters.put("psConditionOcc30d", ccae.getPsConditionOcc30d());
+        parameters.put("psConditionOccInpt180d", ccae.getPsConditionOccInpt180d());
+        parameters.put("psConditionEra", ccae.getPsConditionEra());
+        parameters.put("psConditionEraEver", ccae.getPsConditionEraEver());
+        parameters.put("psConditionEraOverlap", ccae.getPsConditionEraOverlap());
+        parameters.put("psConditionGroup", ccae.getPsConditionGroup());
+        parameters.put("psConditionGroupMeddra", ccae.getPsConditionGroupMeddra());
+        parameters.put("psConditionGroupSnomed", ccae.getPsConditionGroupSnomed());
+        parameters.put("psDrugExposure", ccae.getPsDrugExposure());
+        parameters.put("psDrugExposure365d", ccae.getPsDrugExposure365d());
+        parameters.put("psDrugExposure30d", ccae.getPsDrugEra30d());
+        parameters.put("psDrugEra", ccae.getPsDrugEra());
+        parameters.put("psDrugEra365d", ccae.getPsDrugEra365d());
+        parameters.put("psDrugEra30d", ccae.getPsDrugEra30d());
+        parameters.put("psDrugEraOverlap", ccae.getPsDrugEraOverlap());
+        parameters.put("psDrugEraEver", ccae.getPsDrugEraEver());
+        parameters.put("psDrugGroup", ccae.getPsDrugGroup());
+        parameters.put("psProcedureOcc", ccae.getPsProcedureOcc());
+        parameters.put("psProcedureOcc365d", ccae.getPsProcedureOcc365d());
+        parameters.put("psProcedureOcc30d", ccae.getPsProcedureOcc30d());
+        parameters.put("psProcedureGroup", ccae.getPsProcedureGroup());
+        parameters.put("psObservation", ccae.getPsObservation());
+        parameters.put("psObservation365d", ccae.getPsObservation365d());
+        parameters.put("psObservation30d", ccae.getPsObservation30d());
+        parameters.put("psObservationCount365d", ccae.getPsObservationCount365d());
+        parameters.put("psMeasurement", ccae.getPsMeasurement());
+        parameters.put("psMeasurement365d", ccae.getPsMeasurement365d());
+        parameters.put("psMeasurement30d", ccae.getPsMeasurement30d());
+        parameters.put("psMeasurementCount365d", ccae.getPsMeasurementCount365d());
+        parameters.put("psMeasurementBelow", ccae.getPsMeasurementBelow());
+        parameters.put("psMeasurementAbove", ccae.getPsMeasurementAbove());
+        parameters.put("psConceptCounts", ccae.getPsConceptCounts());
+        parameters.put("psRiskScores", ccae.getPsRiskScores());
+        parameters.put("psRiskScoresCharlson", ccae.getPsRiskScoresCharlson());
+        parameters.put("psRiskScoresDcsi", ccae.getPsRiskScoresDcsi());
+        parameters.put("psRiskScoresChads2", ccae.getPsRiskScoresChads2());
+        parameters.put("psRiskScoresChads2vasc", ccae.getPsRiskScoresChads2vasc());
+        parameters.put("psInteractionYear", ccae.getPsInteractionYear());
+        parameters.put("psInteractionMonth", ccae.getPsInteractionMonth());        
+        parameters.put("omCovariates", ccae.getOmCovariates());
+        
+        if (ccae.getOmExclusionId() > 0) {
+            ConceptSetExpression cse = conceptSetService.getConceptSetExpression(ccae.getOmExclusionId());
+            Collection<Long> exclusions = vocabularyService.resolveConceptSetExpression(sourceKey, cse);
+            parameters.put("omExclusions" , exclusions);
+        }
+        
+        if (ccae.getOmInclusionId() > 0) {
+            ConceptSetExpression cse = conceptSetService.getConceptSetExpression(ccae.getOmInclusionId());
+            Collection<Long> inclusions = vocabularyService.resolveConceptSetExpression(sourceKey, cse);
+            parameters.put("omInclusions" , inclusions);
+        }        
+
+        parameters.put("omDemographics", ccae.getOmDemographics());
+        parameters.put("omDemographicsGender", ccae.getOmDemographicsGender());
+        parameters.put("omDemographicsRace", ccae.getOmDemographicsRace());
+        parameters.put("omDemographicsEthnicity", ccae.getOmDemographicsEthnicity());
+        parameters.put("omDemographicsAge", ccae.getOmDemographicsAge());
+        parameters.put("omDemographicsYear", ccae.getOmDemographicsYear());
+        parameters.put("omDemographicsMonth", ccae.getOmDemographicsMonth());
+        parameters.put("omTrim", ccae.getOmTrim());
+        parameters.put("omTrimFraction", ccae.getOmTrimFraction());
+        parameters.put("omMatch", ccae.getOmMatch());
+        parameters.put("omMatchMaxRatio", ccae.getOmMatchMaxRatio());
+        parameters.put("omStrat", ccae.getOmStrat());
+        parameters.put("omStratNumStrata", ccae.getOmStratNumStrata());
+        parameters.put("omConditionOcc", ccae.getOmConditionOcc());
+        parameters.put("omConditionOcc365d", ccae.getOmConditionOcc365d());
+        parameters.put("omConditionOcc30d", ccae.getOmConditionOcc30d());
+        parameters.put("omConditionOccInpt180d", ccae.getOmConditionOccInpt180d());
+        parameters.put("omConditionEra", ccae.getOmConditionEra());
+        parameters.put("omConditionEraEver", ccae.getOmConditionEraEver());
+        parameters.put("omConditionEraOverlap", ccae.getOmConditionEraOverlap());
+        parameters.put("omConditionGroup", ccae.getOmConditionGroup());
+        parameters.put("omConditionGroupMeddra", ccae.getOmConditionGroupMeddra());
+        parameters.put("omConditionGroupSnomed", ccae.getOmConditionGroupSnomed());
+        parameters.put("omDrugExposure", ccae.getOmDrugExposure());
+        parameters.put("omDrugExposure365d", ccae.getOmDrugExposure365d());
+        parameters.put("omDrugExposure30d", ccae.getOmDrugEra30d());
+        parameters.put("omDrugEra", ccae.getOmDrugEra());
+        parameters.put("omDrugEra365d", ccae.getOmDrugEra365d());
+        parameters.put("omDrugEra30d", ccae.getOmDrugEra30d());
+        parameters.put("omDrugEraOverlap", ccae.getOmDrugEraOverlap());
+        parameters.put("omDrugEraEver", ccae.getOmDrugEraEver());
+        parameters.put("omDrugGroup", ccae.getOmDrugGroup());
+        parameters.put("omProcedureOcc", ccae.getOmProcedureOcc());
+        parameters.put("omProcedureOcc365d", ccae.getOmProcedureOcc365d());
+        parameters.put("omProcedureOcc30d", ccae.getOmProcedureOcc30d());
+        parameters.put("omProcedureGroup", ccae.getOmProcedureGroup());
+        parameters.put("omObservation", ccae.getOmObservation());
+        parameters.put("omObservation365d", ccae.getOmObservation365d());
+        parameters.put("omObservation30d", ccae.getOmObservation30d());
+        parameters.put("omObservationCount365d", ccae.getOmObservationCount365d());
+        parameters.put("omMeasurement", ccae.getOmMeasurement());
+        parameters.put("omMeasurement365d", ccae.getOmMeasurement365d());
+        parameters.put("omMeasurement30d", ccae.getOmMeasurement30d());
+        parameters.put("omMeasurementCount365d", ccae.getOmMeasurementCount365d());
+        parameters.put("omMeasurementBelow", ccae.getOmMeasurementBelow());
+        parameters.put("omMeasurementAbove", ccae.getOmMeasurementAbove());
+        parameters.put("omConceptCounts", ccae.getOmConceptCounts());
+        parameters.put("omRiskScores", ccae.getOmRiskScores());
+        parameters.put("omRiskScoresCharlson", ccae.getOmRiskScoresCharlson());
+        parameters.put("omRiskScoresDcsi", ccae.getOmRiskScoresDcsi());
+        parameters.put("omRiskScoresChads2", ccae.getOmRiskScoresChads2());
+        parameters.put("omRiskScoresChads2vasc", ccae.getOmRiskScoresChads2vasc());
+        parameters.put("omInteractionYear", ccae.getOmInteractionYear());
+        parameters.put("omInteractionMonth", ccae.getOmInteractionMonth());
+
+        parameters.put("delCovariatesSmallCount", ccae.getDelCovariatesSmallCount());
+        
+        if (ccae.getNegativeControlId() > 0) {
+            ConceptSetExpression cse = conceptSetService.getConceptSetExpression(ccae.getNegativeControlId());
+            Collection<Long> inclusions = vocabularyService.resolveConceptSetExpression(sourceKey, cse);
+            parameters.put("negativeControls" , inclusions);
+        }          
+        
         RSBTasklet t = new RSBTasklet(getComparativeCohortAnalysisExecutionRepository());
         t.setFunctionName(functionName);
         t.setParameters(parameters);
@@ -247,17 +409,6 @@ public class ComparativeCohortAnalysisService extends AbstractDaoService {
         return getComparativeCohortAnalysisExecutionRepository().findByExecutionId(executionId);
     }
 
-    private final RowMapper<StratPopDistributionData> matchedDistributionMapper = new RowMapper<StratPopDistributionData>() {
-        @Override
-        public StratPopDistributionData mapRow(final ResultSet resultSet, final int arg1) throws SQLException {
-            StratPopDistributionData data = new StratPopDistributionData();
-            data.ps = resultSet.getFloat("ps");
-            data.treatment = resultSet.getInt("treatment");
-            data.person_count = resultSet.getInt("person_count");
-            return data;
-        }
-    };
-
     private final RowMapper<PropensityScoreModelCovariate> covariateMapper = new RowMapper<PropensityScoreModelCovariate>() {
         @Override
         public PropensityScoreModelCovariate mapRow(final ResultSet resultSet, final int arg1) throws SQLException {
@@ -273,19 +424,19 @@ public class ComparativeCohortAnalysisService extends AbstractDaoService {
         }
     };
 
-    private final RowMapper<PopDistributionValue> psmodelDistributionMapper = new RowMapper<PopDistributionValue>() {
+    private final RowMapper<ModelScoreDistributionValue> ScoreDistributionMapper = new RowMapper<ModelScoreDistributionValue>() {
         @Override
-        public PopDistributionValue mapRow(final ResultSet resultSet, final int arg1) throws SQLException {
-            float ps = resultSet.getFloat("ps");
+        public ModelScoreDistributionValue mapRow(final ResultSet resultSet, final int arg1) throws SQLException {
+            float score = resultSet.getFloat("score");
             int treatment = resultSet.getInt("treatment");
             int comparator = resultSet.getInt("comparator");
 
-            PopDistributionValue popDistributionValue = new PopDistributionValue();
-            popDistributionValue.ps = ps;
-            popDistributionValue.treatment = treatment;
-            popDistributionValue.comparator = comparator;
+            ModelScoreDistributionValue distributionValue = new ModelScoreDistributionValue();
+            distributionValue.score = score;
+            distributionValue.treatment = treatment;
+            distributionValue.comparator = comparator;
 
-            return popDistributionValue;
+            return distributionValue;
         }
     };
 
@@ -323,6 +474,22 @@ public class ComparativeCohortAnalysisService extends AbstractDaoService {
             return balanceResult;
         }
     };    
+    
+    private final RowMapper<OutcomeModel> outcomeModelMapper = new RowMapper<OutcomeModel>() {
+        @Override
+        public OutcomeModel mapRow(final ResultSet resultSet, final int arg1) throws SQLException {
+            OutcomeModel om = new OutcomeModel();
+            om.comparatorId = resultSet.getInt("comparator_id");
+            om.treatmentId = resultSet.getInt("treatment_id");
+            om.outcomeId = resultSet.getInt("outcome_id");
+            om.estimate = resultSet.getFloat("estimate");
+            om.lower95 = resultSet.getFloat("lower95");
+            om.upper95 = resultSet.getFloat("upper95");
+            om.logRr = resultSet.getFloat("log_rr");
+            om.seLogRr = resultSet.getFloat("se_log_rr");
+            return om;
+        }
+    };    
 
     @GET
     @Path("execution/{eid}/attrition")
@@ -355,49 +522,63 @@ public class ComparativeCohortAnalysisService extends AbstractDaoService {
     }    
 
     @GET
-    @Path("execution/{eid}/psmodeldist")
+    @Path("execution/{eid}/om")
     @Produces(MediaType.APPLICATION_JSON)
-    public Collection<PopDistributionValue> getPsModelDistribution(@PathParam("eid") int executionId) {
+    public Collection<OutcomeModel> getOutcomeModel(@PathParam("eid") int executionId) {
         ComparativeCohortAnalysisExecution ccae = getComparativeCohortAnalysisExecution(executionId);
         Source source = getSourceRepository().findBySourceId(ccae.getSourceId());
         String tableQualifier = source.getTableQualifier(SourceDaimon.DaimonType.Results);
 
-        String sqlDist = ResourceHelper.GetResourceAsString("/resources/cohortcomparison/sql/ps_model_agg.sql");
+        String sqlDist = ResourceHelper.GetResourceAsString("/resources/cohortcomparison/sql/outcome_model.sql");
         sqlDist = SqlRender.renderSql(sqlDist, new String[]{"resultsTableQualifier", "executionId"}, new String[]{
             tableQualifier, Integer.toString(executionId)});
         sqlDist = SqlTranslate.translateSql(sqlDist, "sql server", source.getSourceDialect());
-        return getSourceJdbcTemplate(source).query(sqlDist, psmodelDistributionMapper);
+        return getSourceJdbcTemplate(source).query(sqlDist, outcomeModelMapper);
     }
+    
+    @GET
+    @Path("execution/{eid}/psmodelpropscore")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Collection<ModelScoreDistributionValue> getPsModelPropScore(@PathParam("eid") int executionId) {
+        ComparativeCohortAnalysisExecution ccae = getComparativeCohortAnalysisExecution(executionId);
+        Source source = getSourceRepository().findBySourceId(ccae.getSourceId());
+        String tableQualifier = source.getTableQualifier(SourceDaimon.DaimonType.Results);
+
+        String sqlDist = ResourceHelper.GetResourceAsString("/resources/cohortcomparison/sql/psmodel_prop_score.sql");
+        sqlDist = SqlRender.renderSql(sqlDist, new String[]{"resultsTableQualifier", "executionId"}, new String[]{
+            tableQualifier, Integer.toString(executionId)});
+        sqlDist = SqlTranslate.translateSql(sqlDist, "sql server", source.getSourceDialect());
+        return getSourceJdbcTemplate(source).query(sqlDist, ScoreDistributionMapper);
+    }
+    
+    @GET
+    @Path("execution/{eid}/psmodelprefscore")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Collection<ModelScoreDistributionValue> getPsModelPrefScore(@PathParam("eid") int executionId) {
+        ComparativeCohortAnalysisExecution ccae = getComparativeCohortAnalysisExecution(executionId);
+        Source source = getSourceRepository().findBySourceId(ccae.getSourceId());
+        String tableQualifier = source.getTableQualifier(SourceDaimon.DaimonType.Results);
+
+        String sqlDist = ResourceHelper.GetResourceAsString("/resources/cohortcomparison/sql/psmodel_pref_score.sql");
+        sqlDist = SqlRender.renderSql(sqlDist, new String[]{"resultsTableQualifier", "executionId"}, new String[]{
+            tableQualifier, Integer.toString(executionId)});
+        sqlDist = SqlTranslate.translateSql(sqlDist, "sql server", source.getSourceDialect());
+        return getSourceJdbcTemplate(source).query(sqlDist, ScoreDistributionMapper);
+    }    
 
     @GET
-    @Path("execution/{eid}/matchedpopdist")
+    @Path("execution/{eid}/poppropdist")
     @Produces(MediaType.APPLICATION_JSON)
-    public Collection<PopDistributionValue> getMatchedPopDistribution(@PathParam("eid") int executionId) {
+    public Collection<ModelScoreDistributionValue> getPopPropDistribution(@PathParam("eid") int executionId) {
         ComparativeCohortAnalysisExecution ccae = getComparativeCohortAnalysisExecution(executionId);
         Source source = getSourceRepository().findBySourceId(ccae.getSourceId());
         String tableQualifier = source.getTableQualifier(SourceDaimon.DaimonType.Results);
 
-        String sqlDist = ResourceHelper.GetResourceAsString("/resources/cohortcomparison/sql/matched_pop_agg.sql");
+        String sqlDist = ResourceHelper.GetResourceAsString("/resources/cohortcomparison/sql/pop_prop_score.sql");
         sqlDist = SqlRender.renderSql(sqlDist, new String[]{"resultsTableQualifier", "executionId"}, new String[]{
             tableQualifier, Integer.toString(executionId)});
         sqlDist = SqlTranslate.translateSql(sqlDist, "sql server", source.getSourceDialect());
-        ArrayList<StratPopDistributionData> datum = (ArrayList<StratPopDistributionData>) getSourceJdbcTemplate(source).query(sqlDist, matchedDistributionMapper);
-        HashMap<Float, PopDistributionValue> results = new HashMap<>();
-        for (StratPopDistributionData data : datum) {
-            if (!results.containsKey(data.ps)) {
-                PopDistributionValue value = new PopDistributionValue();
-                value.ps = data.ps;
-                results.put(value.ps, value);
-            }
-
-            if (data.treatment == 0) {
-                results.get(data.ps).comparator = data.person_count;
-            } else if (data.treatment == 1) {
-                results.get(data.ps).treatment = data.person_count;
-            }
-        }
-
-        return results.values();
+        return getSourceJdbcTemplate(source).query(sqlDist, ScoreDistributionMapper);
     }
 
     @GET

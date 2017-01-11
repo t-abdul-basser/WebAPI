@@ -14,11 +14,6 @@
 package org.ohdsi.webapi.cohortcomparison;
 
 import java.util.ArrayList;
-import org.ohdsi.sql.SqlRender;
-import org.ohdsi.sql.SqlTranslate;
-import org.ohdsi.webapi.helper.ResourceHelper;
-import org.ohdsi.webapi.source.Source;
-import org.ohdsi.webapi.source.SourceDaimon;
 
 /**
  * @author fdefalco <fdefalco@ohdsi.org>
