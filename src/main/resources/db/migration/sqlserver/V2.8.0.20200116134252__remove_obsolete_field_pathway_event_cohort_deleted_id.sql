@@ -10,4 +10,12 @@ where
   and c.name = 'is_deleted';
 execute (@command)
 
-ALTER TABLE ${ohdsiSchema}.pathway_event_cohort DROP COLUMN is_deleted;
+IF EXISTS (SELECT 1
+               FROM   INFORMATION_SCHEMA.COLUMNS
+               WHERE  TABLE_NAME = 'pathway_event_cohort'
+                      AND COLUMN_NAME = 'is_deleted'
+                      AND TABLE_SCHEMA='${ohdsiSchema}')
+  BEGIN
+      ALTER TABLE pathway_event_cohort
+        DROP COLUMN is_deleted
+  END
